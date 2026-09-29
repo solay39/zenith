@@ -24,8 +24,36 @@ function formatVolume(value: number) {
   return `$${Math.round(value)}`
 }
 
-export async function GET() {
+type MexcKline = [number, string, string, string, string, string, number, string, number, string, string, string]
+
+function historicalTargets(price: number, candles: MexcKline[]) {
+  const closes = candles.map((candle) => Number(candle[4])).filter(Number.isFinite)
+  const highs = candles.map((candle) => Number(candle[2])).filter(Number.isFinite)
+  const lows = candles.map((candle) => Number(candle[3])).filter(Number.isFinite)
+  if (closes.length < 14) return null
+  const recent = closes.slice(-14)
+  const mean = recent.reduce((sum, value) => sum + value, 0) / recent.length
+  const meanIndex = (recent.length - 1) / 2
+  const slope = recent.reduce((sum, value, index) => sum + (index - meanIndex) * (value - mean), 0) / recent.reduce((sum, _, index) => sum + (index - meanIndex) ** 2, 0)
+  const atr = highs.slice(-14).reduce((sum, high, index) => sum + (high - (lows.slice(-14)[index] ?? high)), 0) / 14
+  const volatility = Math.max(atr / price, 0.01)
+  const momentum = Math.max(-0.15, Math.min(0.15, (slope * 14) / price))
+  const projected = (days: number) => price * (1 + momentum * Math.sqrt(days) + volatility * 0.35 * Math.sqrt(days))
+  return { oneDay: projected(1), twoDays: projected(2), oneWeek: projected(7), horizon: 'daily OHLCV · 90d lookback' }
+}
+
+export async function GET(request: Request) {
   try {
+    const selectedSymbol = new URL(request.url).searchParams.get('symbol')?.toUpperCase()
+    if (selectedSymbol) {
+      const response = await fetch(`https://api.mexc.com/api/v3/klines?symbol=${encodeURIComponent(selectedSymbol)}USDT&interval=1d&limit=90`, { next: { revalidate: 300 }, headers: { Accept: 'application/json' } })
+      if (!response.ok) throw new Error(`MEXC candles responded with ${response.status}`)
+      const candles = (await response.json()) as MexcKline[]
+      const latest = Number(candles.at(-1)?.[4])
+      const targets = historicalTargets(latest, candles)
+      if (!targets) throw new Error('Insufficient historical data')
+      return NextResponse.json({ symbol: selectedSymbol, targets: { oneDay: `$${formatPrice(targets.oneDay)}`, twoDays: `$${formatPrice(targets.twoDays)}`, oneWeek: `$${formatPrice(targets.oneWeek)}` }, methodology: targets.horizon, source: 'MEXC OHLCV' })
+    }
     const response = await fetch('https://api.mexc.com/api/v3/ticker/24hr', {
       next: { revalidate: 60 },
       headers: { Accept: 'application/json' },

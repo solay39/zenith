@@ -108,6 +108,8 @@ export default function Page() {
   const [marketStatus, setMarketStatus] = useState<'loading' | 'live' | 'offline'>('loading')
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
+  const [historicalTargets, setHistoricalTargets] = useState<Signal['targets'] | null>(null)
+  const [targetMethodology, setTargetMethodology] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -130,13 +132,38 @@ export default function Page() {
     return () => { active = false; window.clearInterval(interval) }
   }, [])
 
+  useEffect(() => {
+    if (!selectedSymbol) {
+      setHistoricalTargets(null)
+      setTargetMethodology(null)
+      return
+    }
+    let active = true
+    fetch(`/api/mexc?symbol=${encodeURIComponent(selectedSymbol)}`, { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Historical data unavailable')))
+      .then((data) => {
+        if (active) {
+          setHistoricalTargets(data.targets ?? null)
+          setTargetMethodology(data.methodology ?? null)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setHistoricalTargets(null)
+          setTargetMethodology(null)
+        }
+      })
+    return () => { active = false }
+  }, [selectedSymbol])
+
   const filteredSignals = useMemo(() => liveSignals.filter((signal) => {
     const matchesRisk = riskFilter === 'All risk levels' || signal.risk === riskFilter
     const query = search.toLowerCase()
     return matchesRisk && (!query || signal.name.toLowerCase().includes(query) || signal.symbol.toLowerCase().includes(query))
   }), [liveSignals, riskFilter, search])
 
-  const selectedSignal = liveSignals.find((signal) => signal.symbol === selectedSymbol) ?? filteredSignals[0] ?? liveSignals[0]
+  const selectedSignalBase = liveSignals.find((signal) => signal.symbol === selectedSymbol) ?? filteredSignals[0] ?? liveSignals[0]
+  const selectedSignal = selectedSignalBase ? { ...selectedSignalBase, targets: historicalTargets ?? selectedSignalBase.targets } : undefined
 
   return (
     <main className="min-h-screen bg-background text-foreground">
