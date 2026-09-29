@@ -50,6 +50,12 @@ export async function GET() {
         const risk = riskScore < 0.24 ? 'Low' : riskScore < 0.48 ? 'Moderate' : 'High'
         const adjustedScore = Math.round(score * (1 - riskScore * 0.45))
         const price = Number(ticker.lastPrice)
+        const bullish = change >= 1.5 && adjustedScore >= 62
+        const bearish = change <= -2.5 || adjustedScore < 42
+        const action = bullish ? 'BUY' : bearish ? 'SELL' : 'WAIT'
+        const targetMultiplier = bullish ? 1 + Math.min(0.18, Math.max(0.04, Math.abs(change) / 100 * 1.4)) : bearish ? 1 - Math.min(0.15, Math.max(0.04, Math.abs(change) / 100)) : 1 + 0.03
+        const targetPrice = price * targetMultiplier
+        const stopLoss = price * (1 - Math.min(0.12, Math.max(0.025, riskScore * 0.12)))
         return {
           name: symbol,
           symbol,
@@ -58,6 +64,9 @@ export async function GET() {
           change: `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`,
           score,
           adjustedScore,
+          action,
+          targetPrice: `$${formatPrice(targetPrice)}`,
+          stopLoss: `$${formatPrice(stopLoss)}`,
           riskScore,
           risk,
           volume: formatVolume(volume),
