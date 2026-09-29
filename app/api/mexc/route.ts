@@ -53,8 +53,11 @@ export async function GET() {
         const bullish = change >= 1.5 && adjustedScore >= 62
         const bearish = change <= -2.5 || adjustedScore < 42
         const action = bullish ? 'BUY' : bearish ? 'SELL' : 'WAIT'
-        const targetMultiplier = bullish ? 1 + Math.min(0.18, Math.max(0.04, Math.abs(change) / 100 * 1.4)) : bearish ? 1 - Math.min(0.15, Math.max(0.04, Math.abs(change) / 100)) : 1 + 0.03
-        const targetPrice = price * targetMultiplier
+        const direction = bearish ? -1 : 1
+        const dailyMove = Math.min(0.18, Math.max(0.025, Math.abs(change) / 100 * 1.4 + volatilityRisk * 0.02))
+        const targetPrice1d = price * (1 + direction * dailyMove)
+        const targetPrice2d = price * (1 + direction * Math.min(0.30, dailyMove * 1.55))
+        const targetPrice1w = price * (1 + direction * Math.min(0.65, dailyMove * 3.1))
         const stopLoss = price * (1 - Math.min(0.12, Math.max(0.025, riskScore * 0.12)))
         return {
           name: symbol,
@@ -65,7 +68,12 @@ export async function GET() {
           score,
           adjustedScore,
           action,
-          targetPrice: `$${formatPrice(targetPrice)}`,
+          targetPrice: `$${formatPrice(targetPrice1d)}`,
+          targets: {
+            oneDay: `$${formatPrice(targetPrice1d)}`,
+            twoDays: `$${formatPrice(targetPrice2d)}`,
+            oneWeek: `$${formatPrice(targetPrice1w)}`,
+          },
           stopLoss: `$${formatPrice(stopLoss)}`,
           riskScore,
           risk,
