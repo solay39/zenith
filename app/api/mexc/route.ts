@@ -36,7 +36,7 @@ export async function GET() {
     const markets = tickers
       .filter((ticker) => ticker.symbol.endsWith('USDT') && Number(ticker.quoteVolume) > 0)
       .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
-      .slice(0, 6)
+      .slice(0, 100)
       .map((ticker, index) => {
         const symbol = ticker.symbol.replace('USDT', '')
         const change = Number(ticker.priceChangePercent) || 0
