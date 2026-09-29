@@ -42,7 +42,13 @@ export async function GET() {
         const change = Number(ticker.priceChangePercent) || 0
         const volume = Number(ticker.quoteVolume) || 0
         const score = Math.max(20, Math.min(99, Math.round(62 + change * 1.8 + Math.log10(volume + 1) * 2)))
-        const risk = Math.abs(change) > 8 || index > 8 ? 'High' : Math.abs(change) > 3 ? 'Moderate' : 'Low'
+        // Public MEXC data supports a market-risk proxy, not on-chain security claims.
+        const liquidityRisk = Math.max(0, Math.min(1, 1 - Math.log10(volume + 1) / 9))
+        const volatilityRisk = Math.min(1, Math.abs(change) / 15)
+        const concentrationProxy = index > 8 ? 0.45 : index > 5 ? 0.3 : 0.18
+        const riskScore = Number((liquidityRisk * 0.45 + volatilityRisk * 0.4 + concentrationProxy * 0.15).toFixed(2))
+        const risk = riskScore < 0.3 ? 'Low' : riskScore < 0.6 ? 'Moderate' : 'High'
+        const adjustedScore = Math.round(score * (1 - riskScore * 0.45))
         const price = Number(ticker.lastPrice)
         return {
           name: symbol,
@@ -51,6 +57,8 @@ export async function GET() {
           price: `$${formatPrice(price)}`,
           change: `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`,
           score,
+          adjustedScore,
+          riskScore,
           risk,
           volume: formatVolume(volume),
           reason: change >= 0 ? '24h momentum' : 'Downside pressure',

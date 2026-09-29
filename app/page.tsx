@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 
 const signals = [
-  { name: 'Aether Protocol', symbol: 'AETH', network: 'Ethereum', price: '$0.0842', change: '+18.42%', score: 92, risk: 'Low', volume: '$4.8M', reason: 'Accumulation + audit pass', trend: [31, 35, 33, 42, 45, 51, 63, 67, 74, 86] },
+  { name: 'Aether Protocol', symbol: 'AETH', network: 'Ethereum', price: '$0.0842', change: '+18.42%', score: 92, adjustedScore: 76, riskScore: 0.38, risk: 'Low', volume: '$4.8M', reason: 'Accumulation + audit pass', trend: [31, 35, 33, 42, 45, 51, 63, 67, 74, 86] },
   { name: 'Nexus Compute', symbol: 'NXS', network: 'Base', price: '$1.284', change: '+12.08%', score: 86, risk: 'Moderate', volume: '$2.1M', reason: 'Whale inflow detected', trend: [24, 29, 28, 35, 39, 37, 48, 52, 62, 71] },
   { name: 'Mori Finance', symbol: 'MORI', network: 'Solana', price: '$0.0176', change: '+9.74%', score: 81, risk: 'Moderate', volume: '$890K', reason: 'Strong social momentum', trend: [32, 28, 34, 30, 38, 43, 39, 51, 55, 64] },
   { name: 'Helix Layer', symbol: 'HLX', network: 'Arbitrum', price: '$0.226', change: '+7.31%', score: 74, risk: 'High', volume: '$612K', reason: 'Volume breakout', trend: [37, 39, 36, 41, 40, 46, 44, 51, 56, 60] },
@@ -106,7 +106,7 @@ export default function Page() {
     const matchesRisk = riskFilter === 'All risk levels' || signal.risk === riskFilter
     const query = search.toLowerCase()
     return matchesRisk && (!query || signal.name.toLowerCase().includes(query) || signal.symbol.toLowerCase().includes(query))
-  }), [riskFilter, search])
+  }), [liveSignals, riskFilter, search])
 
   return (
     <main className="min-h-screen bg-background text-foreground">
