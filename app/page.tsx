@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Activity,
   ArrowDownRight,
@@ -77,8 +77,32 @@ export default function Page() {
   const [riskFilter, setRiskFilter] = useState('All risk levels')
   const [search, setSearch] = useState('')
   const [mobileNav, setMobileNav] = useState(false)
+  const [liveSignals, setLiveSignals] = useState(signals)
+  const [marketStatus, setMarketStatus] = useState<'loading' | 'live' | 'offline'>('loading')
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
-  const filteredSignals = useMemo(() => signals.filter((signal) => {
+  useEffect(() => {
+    let active = true
+    const loadMarkets = async () => {
+      try {
+        const response = await fetch('/api/mexc', { cache: 'no-store' })
+        if (!response.ok) throw new Error('MEXC unavailable')
+        const data = await response.json()
+        if (active && data.markets?.length) {
+          setLiveSignals(data.markets)
+          setMarketStatus('live')
+          setLastUpdated(data.updatedAt)
+        }
+      } catch {
+        if (active) setMarketStatus('offline')
+      }
+    }
+    loadMarkets()
+    const interval = window.setInterval(loadMarkets, 60_000)
+    return () => { active = false; window.clearInterval(interval) }
+  }, [])
+
+  const filteredSignals = useMemo(() => liveSignals.filter((signal) => {
     const matchesRisk = riskFilter === 'All risk levels' || signal.risk === riskFilter
     const query = search.toLowerCase()
     return matchesRisk && (!query || signal.name.toLowerCase().includes(query) || signal.symbol.toLowerCase().includes(query))
@@ -110,7 +134,7 @@ export default function Page() {
           <header className="flex h-20 items-center justify-between border-b border-border px-5 md:px-8"><div className="flex items-center gap-3"><button className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="Open navigation"><Menu className="size-5" /></button><div><p className="text-xs text-muted-foreground">Monday, September 29, 2026</p><h1 className="text-lg font-semibold tracking-tight">Good morning, Jordan</h1></div></div><div className="flex items-center gap-2"><div className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 md:flex"><Search className="size-4 text-muted-foreground" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-36 bg-transparent text-xs outline-none placeholder:text-muted-foreground" placeholder="Search assets" /><kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">⌘ K</kbd></div><button className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-accent" aria-label="Notifications"><Bell className="size-4" /></button><button className="hidden rounded-lg border border-border p-2 text-muted-foreground hover:bg-accent sm:block" aria-label="Help"><CircleHelp className="size-4" /></button></div></header>
 
           <div className="mx-auto max-w-[1500px] space-y-8 p-5 md:p-8">
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="mb-2 flex items-center gap-2 text-xs text-emerald-400"><span className="size-1.5 rounded-full bg-emerald-400" />Live market scan <span className="text-muted-foreground">updated 2m ago</span></div><h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Market overview</h2><p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">A clearer view of upside potential, with risk signals surfaced before momentum.</p></div><button className="flex items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2.5 text-xs font-semibold text-background transition-opacity hover:opacity-90"><Sparkles className="size-4" />Run new scan</button></div>
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="mb-2 flex items-center gap-2 text-xs text-emerald-400"><span className={`size-1.5 rounded-full ${marketStatus === 'live' ? 'bg-emerald-400' : marketStatus === 'loading' ? 'bg-amber-400' : 'bg-rose-400'}`} />{marketStatus === 'live' ? 'Live MEXC market scan' : marketStatus === 'loading' ? 'Connecting to MEXC' : 'MEXC unavailable'} <span className="text-muted-foreground">{lastUpdated ? `updated ${new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'public spot data'}</span></div><h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Market overview</h2><p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">A clearer view of upside potential, with risk signals surfaced before momentum.</p></div><button className="flex items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2.5 text-xs font-semibold text-background transition-opacity hover:opacity-90"><Sparkles className="size-4" />Run new scan</button></div>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-xl border border-border bg-card p-5"><div className="flex items-center justify-between"><p className="text-xs text-muted-foreground">Market health</p><Gauge className="size-4 text-emerald-400" /></div><div className="mt-4 flex items-end gap-3"><p className="font-mono text-3xl font-semibold">78<span className="text-lg text-muted-foreground">/100</span></p><span className="mb-1 flex items-center gap-1 text-xs text-emerald-400"><ArrowUpRight className="size-3" />4.8%</span></div><div className="mt-4 h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full w-[78%] rounded-full bg-emerald-400" /></div></div><div className="rounded-xl border border-border bg-card p-5"><div className="flex items-center justify-between"><p className="text-xs text-muted-foreground">High-conviction signals</p><Sparkles className="size-4 text-cyan-300" /></div><div className="mt-4 flex items-end gap-3"><p className="font-mono text-3xl font-semibold">12</p><span className="mb-1 flex items-center gap-1 text-xs text-emerald-400"><ArrowUpRight className="size-3" />3 new</span></div><p className="mt-4 text-xs text-muted-foreground">Across 4 networks</p></div><div className="rounded-xl border border-border bg-card p-5"><div className="flex items-center justify-between"><p className="text-xs text-muted-foreground">Risk exposure</p><ShieldCheck className="size-4 text-amber-400" /></div><div className="mt-4 flex items-end gap-3"><p className="font-mono text-3xl font-semibold">34<span className="text-lg text-muted-foreground">%</span></p><span className="mb-1 flex items-center gap-1 text-xs text-amber-400"><ArrowDownRight className="size-3" />2.1%</span></div><p className="mt-4 text-xs text-muted-foreground">Below your 40% threshold</p></div><div className="rounded-xl border border-border bg-card p-5"><div className="flex items-center justify-between"><p className="text-xs text-muted-foreground">Assets monitored</p><WalletCards className="size-4 text-muted-foreground" /></div><div className="mt-4 flex items-end gap-3"><p className="font-mono text-3xl font-semibold">2,481</p><span className="mb-1 text-xs text-muted-foreground">24h universe</span></div><p className="mt-4 text-xs text-muted-foreground">Last full scan 08:42 UTC</p></div></div>
 
@@ -118,7 +142,7 @@ export default function Page() {
 
               <aside className="space-y-6"><div className="rounded-xl border border-border bg-card p-5"><div className="flex items-center justify-between"><div><h3 className="font-semibold">Market pulse</h3><p className="mt-1 text-xs text-muted-foreground">Signal distribution</p></div><Clock3 className="size-4 text-muted-foreground" /></div><div className="mt-6 flex items-center gap-5"><div className="relative flex size-28 items-center justify-center rounded-full" style={{ background: 'conic-gradient(#34d399 0 42%, #fbbf24 42% 70%, #fb7185 70% 100%)' }}><div className="flex size-20 flex-col items-center justify-center rounded-full bg-card"><span className="font-mono text-xl font-semibold">42%</span><span className="text-[10px] text-muted-foreground">bullish</span></div></div><div className="space-y-3 text-xs"><div className="flex items-center gap-2"><span className="size-2 rounded-full bg-emerald-400" />Bullish <span className="ml-auto font-mono text-muted-foreground">42%</span></div><div className="flex items-center gap-2"><span className="size-2 rounded-full bg-amber-400" />Neutral <span className="ml-auto font-mono text-muted-foreground">28%</span></div><div className="flex items-center gap-2"><span className="size-2 rounded-full bg-rose-400" />Bearish <span className="ml-auto font-mono text-muted-foreground">30%</span></div></div></div></div><div className="rounded-xl border border-border bg-card p-5"><div className="flex items-center justify-between"><div><h3 className="font-semibold">Risk watch</h3><p className="mt-1 text-xs text-muted-foreground">Events worth reviewing</p></div><Bell className="size-4 text-amber-400" /></div><div className="mt-5 space-y-4"><div className="flex gap-3"><div className="mt-1 size-2 shrink-0 rounded-full bg-amber-400" /><div><p className="text-xs leading-5">Whale concentration increased for <span className="font-medium">HLX</span></p><p className="mt-1 text-[10px] text-muted-foreground">14 min ago · concentration risk</p></div></div><div className="flex gap-3"><div className="mt-1 size-2 shrink-0 rounded-full bg-cyan-300" /><div><p className="text-xs leading-5">New audit published for <span className="font-medium">AETH</span></p><p className="mt-1 text-[10px] text-muted-foreground">42 min ago · security layer</p></div></div></div><button className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg border border-border py-2 text-xs font-medium hover:bg-accent">Open risk monitor <ArrowUpRight className="size-3" /></button></div></aside></div>
 
-            <footer className="flex flex-col justify-between gap-2 border-t border-border pt-5 text-[10px] text-muted-foreground sm:flex-row"><p className="flex items-center gap-2"><Command className="size-3" />Vector/100 uses probabilistic models. No signal is financial advice.</p><p>Data refreshes every 5 minutes <span className="mx-2 text-border">•</span> API status <span className="text-emerald-400">operational</span></p></footer>
+            <footer className="flex flex-col justify-between gap-2 border-t border-border pt-5 text-[10px] text-muted-foreground sm:flex-row"><p className="flex items-center gap-2"><Command className="size-3" />Vector/100 uses probabilistic models. No signal is financial advice.</p><p>MEXC refreshes every 60 seconds <span className="mx-2 text-border">•</span> API status <span className={marketStatus === 'live' ? 'text-emerald-400' : 'text-amber-400'}>{marketStatus === 'live' ? 'operational' : marketStatus}</span></p></footer>
           </div>
         </section>
       </div>
