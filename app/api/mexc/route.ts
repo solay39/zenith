@@ -45,7 +45,15 @@ function historicalTargets(price: number, candles: MexcKline[]) {
   const volatility = Math.max(atr / price, 0.01)
   const momentum = Math.max(-0.15, Math.min(0.15, (slope * 14) / price))
   const projected = (days: number) => price * (1 + momentum * Math.sqrt(days) + volatility * 0.35 * Math.sqrt(days))
-  return { oneDay: projected(1), twoDays: projected(2), oneWeek: projected(7), ath, athDate, athDistance: ((price - ath) / ath) * 100, horizon: 'daily OHLCV · maximum available history' }
+  const forecasts = [1, 2, 7].map((days) => {
+    const target = projected(days)
+    const distance = Math.max(0, (ath - price) / price)
+    const upside = Math.max(0, (target - price) / price)
+    const reachProbability = Math.round(Math.min(97, Math.max(3, distance === 0 ? 92 : 18 + (upside / distance) * 58)))
+    const breakoutProbability = Math.round(Math.min(88, Math.max(1, reachProbability * (momentum > 0 ? 0.58 : 0.22))))
+    return { days, target, reachProbability, breakoutProbability }
+  })
+  return { oneDay: projected(1), twoDays: projected(2), oneWeek: projected(7), ath, athDate, athDistance: ((price - ath) / ath) * 100, forecasts, horizon: 'daily OHLCV · maximum available history' }
 }
 
 export async function GET(request: Request) {
@@ -58,7 +66,7 @@ export async function GET(request: Request) {
       const latest = Number(candles.at(-1)?.[4])
       const targets = historicalTargets(latest, candles)
       if (!targets) throw new Error('Insufficient historical data')
-      return NextResponse.json({ symbol: selectedSymbol, targets: { oneDay: `$${formatPrice(targets.oneDay)}`, twoDays: `$${formatPrice(targets.twoDays)}`, oneWeek: `$${formatPrice(targets.oneWeek)}` }, ath: `$${formatPrice(targets.ath)}`, athDate: targets.athDate, athDistance: `${targets.athDistance.toFixed(2)}%`, methodology: targets.horizon, source: 'MEXC OHLCV' })
+      return NextResponse.json({ symbol: selectedSymbol, targets: { oneDay: `$${formatPrice(targets.oneDay)}`, twoDays: `$${formatPrice(targets.twoDays)}`, oneWeek: `$${formatPrice(targets.oneWeek)}` }, ath: `$${formatPrice(targets.ath)}`, athDate: targets.athDate, athDistance: `${targets.athDistance.toFixed(2)}%`, athForecasts: targets.forecasts.map((forecast) => ({ horizon: `${forecast.days}D`, target: `$${formatPrice(forecast.target)}`, reachProbability: forecast.reachProbability, breakoutProbability: forecast.breakoutProbability })), methodology: targets.horizon, source: 'MEXC OHLCV' })
     }
     const response = await fetch('https://api.mexc.com/api/v3/ticker/24hr', {
       next: { revalidate: 60 },
