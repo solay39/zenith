@@ -28,6 +28,12 @@ type MexcKline = [number, string, string, string, string, string, number, string
 
 function historicalTargets(price: number, candles: MexcKline[]) {
   const closes = candles.map((candle) => Number(candle[4])).filter(Number.isFinite)
+  const athCandle = candles.reduce<MexcKline | null>((highest, candle) => {
+    const high = Number(candle[2])
+    return Number.isFinite(high) && (!highest || high > Number(highest[2])) ? candle : highest
+  }, null)
+  const ath = athCandle ? Number(athCandle[2]) : price
+  const athDate = athCandle ? new Date(athCandle[0]).toISOString() : null
   const highs = candles.map((candle) => Number(candle[2])).filter(Number.isFinite)
   const lows = candles.map((candle) => Number(candle[3])).filter(Number.isFinite)
   if (closes.length < 14) return null
@@ -39,20 +45,20 @@ function historicalTargets(price: number, candles: MexcKline[]) {
   const volatility = Math.max(atr / price, 0.01)
   const momentum = Math.max(-0.15, Math.min(0.15, (slope * 14) / price))
   const projected = (days: number) => price * (1 + momentum * Math.sqrt(days) + volatility * 0.35 * Math.sqrt(days))
-  return { oneDay: projected(1), twoDays: projected(2), oneWeek: projected(7), horizon: 'daily OHLCV · 90d lookback' }
+  return { oneDay: projected(1), twoDays: projected(2), oneWeek: projected(7), ath, athDate, athDistance: ((price - ath) / ath) * 100, horizon: 'daily OHLCV · maximum available history' }
 }
 
 export async function GET(request: Request) {
   try {
     const selectedSymbol = new URL(request.url).searchParams.get('symbol')?.toUpperCase()
     if (selectedSymbol) {
-      const response = await fetch(`https://api.mexc.com/api/v3/klines?symbol=${encodeURIComponent(selectedSymbol)}USDT&interval=1d&limit=90`, { next: { revalidate: 300 }, headers: { Accept: 'application/json' } })
+      const response = await fetch(`https://api.mexc.com/api/v3/klines?symbol=${encodeURIComponent(selectedSymbol)}USDT&interval=1d&limit=1000`, { next: { revalidate: 300 }, headers: { Accept: 'application/json' } })
       if (!response.ok) throw new Error(`MEXC candles responded with ${response.status}`)
       const candles = (await response.json()) as MexcKline[]
       const latest = Number(candles.at(-1)?.[4])
       const targets = historicalTargets(latest, candles)
       if (!targets) throw new Error('Insufficient historical data')
-      return NextResponse.json({ symbol: selectedSymbol, targets: { oneDay: `$${formatPrice(targets.oneDay)}`, twoDays: `$${formatPrice(targets.twoDays)}`, oneWeek: `$${formatPrice(targets.oneWeek)}` }, methodology: targets.horizon, source: 'MEXC OHLCV' })
+      return NextResponse.json({ symbol: selectedSymbol, targets: { oneDay: `$${formatPrice(targets.oneDay)}`, twoDays: `$${formatPrice(targets.twoDays)}`, oneWeek: `$${formatPrice(targets.oneWeek)}` }, ath: `$${formatPrice(targets.ath)}`, athDate: targets.athDate, athDistance: `${targets.athDistance.toFixed(2)}%`, methodology: targets.horizon, source: 'MEXC OHLCV' })
     }
     const response = await fetch('https://api.mexc.com/api/v3/ticker/24hr', {
       next: { revalidate: 60 },
