@@ -52,6 +52,7 @@ type Signal = {
   athDate?: string
   athDistance?: string
   athForecasts?: { horizon: string; target: string; reachProbability: number; breakoutProbability: number }[]
+  indicators?: { rsi: number; ema12: string; ema26: string; macd: string; volumeRatio: number; bullishPoints: number; bearishPoints: number }
   stopLoss?: string
   trend: number[]
 }
@@ -115,6 +116,7 @@ export default function Page() {
   const [historicalTargets, setHistoricalTargets] = useState<Signal['targets'] | null>(null)
   const [targetMethodology, setTargetMethodology] = useState<string | null>(null)
   const [historicalAth, setHistoricalAth] = useState<Pick<Signal, 'ath' | 'athDate' | 'athDistance' | 'athForecasts'> | null>(null)
+  const [indicatorAnalysis, setIndicatorAnalysis] = useState<Pick<Signal, 'action' | 'reason' | 'indicators'> | null>(null)
 
   useEffect(() => {
     let active = true
@@ -143,6 +145,7 @@ export default function Page() {
       setHistoricalTargets(null)
       setHistoricalAth(null)
       setTargetMethodology(null)
+      setIndicatorAnalysis(null)
       return
     }
     let active = true
@@ -152,6 +155,7 @@ export default function Page() {
         if (active) {
           setHistoricalTargets(data.targets ?? null)
           setHistoricalAth({ ath: data.ath, athDate: data.athDate, athDistance: data.athDistance, athForecasts: data.athForecasts ?? [] })
+          setIndicatorAnalysis({ action: data.action, reason: data.reason, indicators: data.indicators })
           setTargetMethodology(data.methodology ?? null)
         }
       })
@@ -160,6 +164,7 @@ export default function Page() {
           setHistoricalTargets(null)
           setHistoricalAth(null)
           setTargetMethodology(null)
+          setIndicatorAnalysis(null)
         }
       })
     return () => { active = false }
@@ -172,7 +177,7 @@ export default function Page() {
   }), [liveSignals, riskFilter, search])
 
   const selectedSignalBase = liveSignals.find((signal) => signal.symbol === selectedSymbol) ?? filteredSignals[0] ?? liveSignals[0]
-  const selectedSignal = selectedSignalBase ? { ...selectedSignalBase, targets: historicalTargets ?? selectedSignalBase.targets, ...historicalAth } : undefined
+  const selectedSignal = selectedSignalBase ? { ...selectedSignalBase, targets: historicalTargets ?? selectedSignalBase.targets, ...historicalAth, ...indicatorAnalysis } : undefined
 
   return (
     <main className="min-h-screen bg-background text-foreground">

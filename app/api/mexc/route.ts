@@ -26,6 +26,27 @@ function formatVolume(value: number) {
 
 type MexcKline = [number, string, string, string, string, string, number, string, number, string, string, string]
 
+function indicatorAnalysis(candles: MexcKline[]) {
+  const closes = candles.map((candle) => Number(candle[4])).filter(Number.isFinite)
+  const volumes = candles.map((candle) => Number(candle[7])).filter(Number.isFinite)
+  const ema = (period: number) => closes.slice(-period).reduce((sum, value) => sum + value, 0) / Math.min(period, closes.length)
+  const gains = closes.slice(-15).map((value, index, values) => index === 0 ? 0 : Math.max(0, value - values[index - 1]))
+  const losses = closes.slice(-15).map((value, index, values) => index === 0 ? 0 : Math.max(0, values[index - 1] - value))
+  const avgGain = gains.reduce((sum, value) => sum + value, 0) / 14
+  const avgLoss = losses.reduce((sum, value) => sum + value, 0) / 14
+  const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss))
+  const ema12 = ema(12)
+  const ema26 = ema(26)
+  const macd = ema12 - ema26
+  const latestVolume = volumes.at(-1) ?? 0
+  const averageVolume = volumes.slice(-20).reduce((sum, value) => sum + value, 0) / Math.min(20, volumes.length)
+  const volumeRatio = averageVolume ? latestVolume / averageVolume : 1
+  const bullishPoints = (rsi >= 50 ? 1 : 0) + (macd > 0 ? 1 : 0) + (closes.at(-1)! > ema12 ? 1 : 0) + (volumeRatio >= 1.1 ? 1 : 0)
+  const bearishPoints = (rsi <= 45 ? 1 : 0) + (macd < 0 ? 1 : 0) + (closes.at(-1)! < ema12 ? 1 : 0) + (volumeRatio < 0.8 ? 1 : 0)
+  const action = bullishPoints >= 3 ? 'BUY' : bearishPoints >= 3 ? 'SELL' : 'WAIT'
+  return { rsi: Number(rsi.toFixed(1)), ema12, ema26, macd, volumeRatio: Number(volumeRatio.toFixed(2)), bullishPoints, bearishPoints, action, reason: action === 'BUY' ? 'RSI, MACD, EMA e volume confermano il momentum rialzista' : action === 'SELL' ? 'RSI, MACD, EMA e volume confermano pressione ribassista' : 'Gli indicatori sono discordanti: attendi conferma' }
+}
+
 function historicalTargets(price: number, candles: MexcKline[]) {
   const closes = candles.map((candle) => Number(candle[4])).filter(Number.isFinite)
   const athCandle = candles.reduce<MexcKline | null>((highest, candle) => {
@@ -65,8 +86,9 @@ export async function GET(request: Request) {
       const candles = (await response.json()) as MexcKline[]
       const latest = Number(candles.at(-1)?.[4])
       const targets = historicalTargets(latest, candles)
+      const indicators = indicatorAnalysis(candles)
       if (!targets) throw new Error('Insufficient historical data')
-      return NextResponse.json({ symbol: selectedSymbol, targets: { oneDay: `$${formatPrice(targets.oneDay)}`, twoDays: `$${formatPrice(targets.twoDays)}`, oneWeek: `$${formatPrice(targets.oneWeek)}` }, ath: `$${formatPrice(targets.ath)}`, athDate: targets.athDate, athDistance: `${targets.athDistance.toFixed(2)}%`, athForecasts: targets.forecasts.map((forecast) => ({ horizon: `${forecast.days}D`, target: `$${formatPrice(forecast.target)}`, reachProbability: forecast.reachProbability, breakoutProbability: forecast.breakoutProbability })), methodology: targets.horizon, source: 'MEXC OHLCV' })
+      return NextResponse.json({ symbol: selectedSymbol, action: indicators.action, reason: indicators.reason, indicators: { rsi: indicators.rsi, ema12: `$${formatPrice(indicators.ema12)}`, ema26: `$${formatPrice(indicators.ema26)}`, macd: indicators.macd.toFixed(6), volumeRatio: indicators.volumeRatio, bullishPoints: indicators.bullishPoints, bearishPoints: indicators.bearishPoints }, targets: { oneDay: `$${formatPrice(targets.oneDay)}`, twoDays: `$${formatPrice(targets.twoDays)}`, oneWeek: `$${formatPrice(targets.oneWeek)}` }, ath: `$${formatPrice(targets.ath)}`, athDate: targets.athDate, athDistance: `${targets.athDistance.toFixed(2)}%`, athForecasts: targets.forecasts.map((forecast) => ({ horizon: `${forecast.days}D`, target: `$${formatPrice(forecast.target)}`, reachProbability: forecast.reachProbability, breakoutProbability: forecast.breakoutProbability })), methodology: `${targets.horizon} · RSI(14), EMA(12/26), MACD e volume`, source: 'MEXC OHLCV' })
     }
     const response = await fetch('https://api.mexc.com/api/v3/ticker/24hr', {
       next: { revalidate: 60 },
