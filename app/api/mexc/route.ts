@@ -41,10 +41,12 @@ function indicatorAnalysis(candles: MexcKline[]) {
   const latestVolume = volumes.at(-1) ?? 0
   const averageVolume = volumes.slice(-20).reduce((sum, value) => sum + value, 0) / Math.min(20, volumes.length)
   const volumeRatio = averageVolume ? latestVolume / averageVolume : 1
-  const bullishPoints = (rsi >= 50 ? 1 : 0) + (macd > 0 ? 1 : 0) + (closes.at(-1)! > ema12 ? 1 : 0) + (volumeRatio >= 1.1 ? 1 : 0)
-  const bearishPoints = (rsi <= 45 ? 1 : 0) + (macd < 0 ? 1 : 0) + (closes.at(-1)! < ema12 ? 1 : 0) + (volumeRatio < 0.8 ? 1 : 0)
-  const action = bullishPoints >= 3 ? 'BUY' : bearishPoints >= 3 ? 'SELL' : 'WAIT'
-  return { rsi: Number(rsi.toFixed(1)), ema12, ema26, macd, volumeRatio: Number(volumeRatio.toFixed(2)), bullishPoints, bearishPoints, action, reason: action === 'BUY' ? 'RSI, MACD, EMA e volume confermano il momentum rialzista' : action === 'SELL' ? 'RSI, MACD, EMA e volume confermano pressione ribassista' : 'Gli indicatori sono discordanti: attendi conferma' }
+  const bullishPoints = (rsi >= 52 ? 1 : 0) + (macd > 0 ? 1 : 0) + (closes.at(-1)! > ema12 ? 1 : 0) + (volumeRatio >= 1.1 ? 1 : 0)
+  const bearishPoints = (rsi <= 42 ? 1 : 0) + (macd < 0 ? 1 : 0) + (closes.at(-1)! < ema12 ? 1 : 0) + (volumeRatio < 0.8 ? 1 : 0)
+  const signalScore = bullishPoints - bearishPoints
+  const action = signalScore >= 2 ? 'BUY' : signalScore <= -2 ? 'SELL' : 'WAIT'
+  const confidence = Math.round(Math.min(92, 50 + Math.abs(signalScore) * 12 + Math.abs(bullishPoints - bearishPoints) * 4))
+  return { rsi: Number(rsi.toFixed(1)), ema12, ema26, macd, volumeRatio: Number(volumeRatio.toFixed(2)), bullishPoints, bearishPoints, signalScore, confidence, action, reason: action === 'BUY' ? `Segnale rialzista: ${bullishPoints}/4 indicatori favorevoli` : action === 'SELL' ? `Segnale ribassista: ${bearishPoints}/4 indicatori sfavorevoli` : `Nessun vantaggio netto: ${bullishPoints}/4 rialzisti e ${bearishPoints}/4 ribassisti` }
 }
 
 function historicalTargets(price: number, candles: MexcKline[]) {
@@ -88,7 +90,7 @@ export async function GET(request: Request) {
       const targets = historicalTargets(latest, candles)
       const indicators = indicatorAnalysis(candles)
       if (!targets) throw new Error('Insufficient historical data')
-      return NextResponse.json({ symbol: selectedSymbol, action: indicators.action, reason: indicators.reason, indicators: { rsi: indicators.rsi, ema12: `$${formatPrice(indicators.ema12)}`, ema26: `$${formatPrice(indicators.ema26)}`, macd: indicators.macd.toFixed(6), volumeRatio: indicators.volumeRatio, bullishPoints: indicators.bullishPoints, bearishPoints: indicators.bearishPoints }, targets: { oneDay: `$${formatPrice(targets.oneDay)}`, twoDays: `$${formatPrice(targets.twoDays)}`, oneWeek: `$${formatPrice(targets.oneWeek)}` }, ath: `$${formatPrice(targets.ath)}`, athDate: targets.athDate, athDistance: `${targets.athDistance.toFixed(2)}%`, athForecasts: targets.forecasts.map((forecast) => ({ horizon: `${forecast.days}D`, target: `$${formatPrice(forecast.target)}`, reachProbability: forecast.reachProbability, breakoutProbability: forecast.breakoutProbability })), methodology: `${targets.horizon} · RSI(14), EMA(12/26), MACD e volume`, source: 'MEXC OHLCV' })
+      return NextResponse.json({ symbol: selectedSymbol, action: indicators.action, reason: indicators.reason, indicators: { rsi: indicators.rsi, ema12: `$${formatPrice(indicators.ema12)}`, ema26: `$${formatPrice(indicators.ema26)}`, macd: indicators.macd.toFixed(6), volumeRatio: indicators.volumeRatio, bullishPoints: indicators.bullishPoints, bearishPoints: indicators.bearishPoints, signalScore: indicators.signalScore, confidence: indicators.confidence }, targets: { oneDay: `$${formatPrice(targets.oneDay)}`, twoDays: `$${formatPrice(targets.twoDays)}`, oneWeek: `$${formatPrice(targets.oneWeek)}` }, ath: `$${formatPrice(targets.ath)}`, athDate: targets.athDate, athDistance: `${targets.athDistance.toFixed(2)}%`, athForecasts: targets.forecasts.map((forecast) => ({ horizon: `${forecast.days}D`, target: `$${formatPrice(forecast.target)}`, reachProbability: forecast.reachProbability, breakoutProbability: forecast.breakoutProbability })), methodology: `${targets.horizon} · RSI(14), EMA(12/26), MACD e volume`, source: 'MEXC OHLCV' })
     }
     const response = await fetch('https://api.mexc.com/api/v3/ticker/24hr', {
       next: { revalidate: 60 },
@@ -114,8 +116,8 @@ export async function GET(request: Request) {
         const risk = riskScore < 0.24 ? 'Low' : riskScore < 0.48 ? 'Moderate' : 'High'
         const adjustedScore = Math.round(score * (1 - riskScore * 0.45))
         const price = Number(ticker.lastPrice)
-        const bullish = change >= 1.5 && adjustedScore >= 62
-        const bearish = change <= -2.5 || adjustedScore < 42
+        const bullish = change >= 0.8 && adjustedScore >= 58
+        const bearish = change <= -1.2 || adjustedScore < 40
         const action = bullish ? 'BUY' : bearish ? 'SELL' : 'WAIT'
         const direction = bearish ? -1 : 1
         const dailyMove = Math.min(0.18, Math.max(0.025, Math.abs(change) / 100 * 1.4 + volatilityRisk * 0.02))
