@@ -52,7 +52,7 @@ type Signal = {
   athDate?: string
   athDistance?: string
   athForecasts?: { horizon: string; target: string; reachProbability: number; breakoutProbability: number }[]
-  indicators?: { rsi: number; ema12: string; ema26: string; macd: string; volumeRatio: number; bullishPoints: number; bearishPoints: number }
+  indicators?: { rsi: number; ema12: string; ema26: string; macd: string; volumeRatio: number; bullishPoints: number; bearishPoints: number; signalScore?: number; confidence?: number }
   stopLoss?: string
   trend: number[]
 }
